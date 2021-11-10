@@ -52,6 +52,10 @@ def discretization(x):
 #                 'dictB': {'key_2': 'value_2'}}
 def find_class_distribution(x):
     class_distribution = {}
+    attr_name = ["age", "gender", "polyuria", "polydipsia", "sudden weight loss", "weakness", "polyphagia",
+                 "penital thrush", "visual blurring", "itching", "irritability", "delayed healing",
+                 "partial paresis", "muscle stiffness", "alopecia", "obesity"]
+
     # for 16 attributes (0 to 16)
     for col in range(x.shape[1] - 1):
 
@@ -156,10 +160,6 @@ def find_class_distribution(x):
                     else:
                         attr_dict["no"][1] += 1
 
-            attr_name = ["age", "gender", "polyuria", "polydipsia", "sudden weight loss", "weakness", "polyphagia",
-                         "penital thrush", "visual blurring", "itching", "irritability", "delayed healing",
-                         "partial paresis", "muscle stiffness", "alopecia", "obesity"]
-
             attr_dict["total"][0] += attr_dict["yes"][0]
             attr_dict["total"][0] += attr_dict["no"][0]
 
@@ -177,13 +177,26 @@ def calculate_entropy(dist):
     total = dist[0] + dist[1]
     pos_prop = dist[0] / total
     neg_prop = dist[1] / total
-    entropy = -(pos_prop * math.log(pos_prop, 2)) - (neg_prop * math.log(neg_prop, 2))
-    print(entropy)
+    log = lambda prop: math.log(prop, 2) if prop != 0 else 0
+    entropy = -(pos_prop * log(pos_prop)) - (neg_prop * log(neg_prop))
     return entropy
 
 
-def calculate_info_gain(proportions):
-    return
+def calculate_info_gain(dist):
+    info_gain = {"age": 0, "gender": 0, "polyuria": 0, "polydipsia": 0, "sudden weight loss": 0,
+                 "weakness": 0, "polyphagia": 0, "penital thrush": 0, "visual blurring": 0,
+                 "itching": 0, "irritability": 0, "delayed healing": 0, "partial paresis": 0,
+                 "muscle stiffness": 0, "alopecia": 0, "obesity": 0}
+    for attr in info_gain:
+        gain = calculate_entropy(dist.get(attr).get("total"))
+        for i in dist.get(attr):
+            if i != "total":
+                sv = dist.get(attr).get(i)[0] + dist.get(attr).get(i)[1]
+                s = dist.get(attr).get("total")[0] + dist.get(attr).get("total")[1]
+                ent_sv = calculate_entropy(dist.get(attr).get(i))
+                gain -= abs(sv/s) * ent_sv
+        info_gain[attr] = gain
+    return info_gain
 
 
 def k_fold(x):
@@ -191,7 +204,7 @@ def k_fold(x):
     size = int(x.shape[0] / 5)
     arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
     # for each fold, we create our test and train set and then call KNN classification function
-    for i in range(5):
+    for i in range(1):
         # 1/5 part of the data set as test data
         x_test = x[arr[i]:arr[i + 1]]
 
@@ -205,7 +218,8 @@ def k_fold(x):
         print(x_train.shape)
         print(x_test.shape)
         class_distribution = find_class_distribution(x_train)
-        calculate_entropy(class_distribution.get("age").get("group1"))
+        info_gain = calculate_info_gain(class_distribution)
+        print(info_gain)
 
     return
 
