@@ -15,7 +15,7 @@ class Node(object):
         self.children.append(obj)
 
     def __str__(self, level=0):
-        ret = "\t" * level + repr(self.name) + "\n"
+        ret = "\t|" * level + "+----" + repr(self.name) + "\n"
         for child in self.children:
             ret += child.__str__(level + 1)
         return ret
@@ -188,7 +188,7 @@ def find_class_distribution(x, attributes):
     return class_distribution
 
 
-# dist is 4,- count [ 13+ , 23- ]
+# dist (distribution) is like positive,negative count [ 13+ , 23- ]
 def calculate_entropy(dist):
     total = dist[0] + dist[1]
     if total == 0:
@@ -240,7 +240,6 @@ def find_most_frequent(data):
 
 def ID3(data, rem_features):
     positive, negative = find_most_frequent(data)
-    # # print(positive,negative)
     if positive > negative:
         guess = "Positive"
     else:
@@ -255,7 +254,6 @@ def ID3(data, rem_features):
     else:
         class_distribution = find_class_distribution(data, rem_features)
         info_gain = calculate_info_gain(class_distribution, rem_features)
-        # print(info_gain)
         node_name = select_next_node(info_gain)
         if node_name == "":
             return Node("LEAF-" + guess, [guess])
@@ -278,23 +276,11 @@ def ID3(data, rem_features):
                 if val.lower() == i:
                     subset = np.vstack([subset, data[row, :]])
 
-            # print(i, "--shape",subset.shape)
             node_children.append(ID3(subset, rem_features.copy()))
 
         node = Node(node_name, node_values)
         node.children = node_children
         return node
-
-
-def tree(name):
-    root = Node(name, [])
-    c1 = Node("c1", ["yes", "no"])
-    c2 = Node("c2", ["yes", "no"])
-    root.add_child(c1)
-    root.add_child(c2)
-    coc1 = Node("coc1", ["male", "female"])
-    c1.add_child(coc1)
-    return root
 
 
 def decision_tree_test(node, test):
@@ -311,6 +297,37 @@ def decision_tree_test(node, test):
                 index = node.values.index(val)
                 child_node = node.children[index]
                 return decision_tree_test(child_node, test)
+
+
+def classification_performance(root, x_test):
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
+    for sample in x_test:
+        prediction = decision_tree_test(root, sample)
+        if prediction == sample[16] and prediction == "Positive":
+            tp += 1
+        elif prediction == sample[16] and prediction == "Negative":
+            tn += 1
+        if prediction != sample[16] and prediction == "Positive":
+            fp += 1
+        elif prediction != sample[16] and prediction == "Negative":
+            fn += 1
+    print("TP = ", tp)
+    print("TN = ", tn)
+    print("FP = ", fp)
+    print("FN = ", fn)
+
+    accuracy = (tp + tn) / (tp + tn + fp + fn)
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1_score = (2 * recall * precision) / (recall + precision)
+
+    print("Accuracy: ", accuracy)
+    print("Precision: ", precision)
+    print("Recall: ", recall)
+    print("F1 Score: ", f1_score)
 
 
 def k_fold(x):
@@ -334,30 +351,12 @@ def k_fold(x):
 
         print()
         print("--------------------------FOLD", i + 1, "--------------------------------------------")
-        # print(x_train.shape)
-        # print(x_test.shape)
 
         root = ID3(x_train, attributes)
         print(root)
 
-        tp = 0
-        tn = 0
-        fp = 0
-        fn = 0
-        for sample in x_test:
-            prediction = decision_tree_test(root, sample)
-            if prediction == sample[16] and prediction == "Positive":
-                tp += 1
-            elif prediction == sample[16] and prediction == "Negative":
-                tn += 1
-            if prediction != sample[16] and prediction == "Positive":
-                fp += 1
-            elif prediction != sample[16] and prediction == "Negative":
-                fn += 1
-        print("TP = ", tp)
-        print("TN = ", tn)
-        print("FP = ", fp)
-        print("FN = ", fn)
+        classification_performance(root, x_test)
+
     return
 
 
@@ -372,9 +371,6 @@ def main():
     # shuffle the data
     np.random.seed(101)
     np.random.shuffle(x)
-
-    # df = pd.DataFrame(x)
-    # df.to_csv('file_name.csv')
 
     k_fold(x.copy())
 
