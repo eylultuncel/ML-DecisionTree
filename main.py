@@ -1,21 +1,37 @@
+import copy
 import math
 import numpy
 import pandas as pd
 import numpy as np
+
+# Node class for creating decision tree
+# every node has name -> attribute names
+#                values -> attribute values [ val1 , val2 , .. ]
+#                children -> selected child node for sequentially ordered values [ child of val1, child of val2 , ..]
+#
+#        Attribute (Node)       --> name
+#           /        \
+#         yes         no        --> values
+#         /            \
+#       Attr           Attr     --> children
 from matplotlib import pyplot as plt
+from sklearn import tree
 
 
 class Node(object):
     def __init__(self, name, values):
         self.name = name
         self.values = values
+        self.information_gain = -1
+        self.class_distribution = []
         self.children = []
 
     def add_child(self, obj):
         self.children.append(obj)
 
     def __str__(self, level=0):
-        ret = "\t|" * level + "+----" + repr(self.name) + "\n"
+        ret = "\t|" * level + "+----" + repr(self.name) + "(" + repr(self.class_distribution) + repr(
+            self.information_gain) + ")\n"
         for child in self.children:
             ret += child.__str__(level + 1)
         return ret
@@ -24,6 +40,7 @@ class Node(object):
         return '<tree node representation>'
 
 
+# function for visualizing nested dictionaries
 def print_nested_dict(nested_dict):
     for attr in nested_dict:
         print(attr)
@@ -31,9 +48,10 @@ def print_nested_dict(nested_dict):
             print("\t ", i, "\t[", nested_dict[attr][i][0], "+ ,", nested_dict[attr][i][1], "- ]")
 
 
+# discretization function for "Age" attribute which is continuous attribute
 def discretization(x):
     col = []
-    # for each row of that specific column
+    # for each row of 'Age' column append all values to column array
     for i in range(x.shape[0]):
         col.append(x[i, 0])
     # sort the column array so the first index contains min value, last index contains max value for that column
@@ -41,9 +59,16 @@ def discretization(x):
     min_of_col = col[0]
     max_of_col = col[x.shape[0] - 1]
 
+    # find the interval when we divide the range with 5
     interval = (max_of_col - min_of_col + 1) / 5
 
-    # optimize here
+    # for this data set ou age values vary between 16-90
+    # when we divide this data to 5 groups
+    #                           group 1 --> between 16 and 30
+    #                           group 2 --> between 30 and 45
+    #                           group 3 --> between 45 and 60
+    #                           group 4 --> between 60 and 75
+    #                           group 5 --> between 75 and 90
     for j in range(x.shape[0]):
         # 16->30
         if min_of_col <= x[j, 0] < min_of_col + interval:
@@ -69,12 +94,19 @@ def discretization(x):
 
 # nested_dict = { 'dictA': {'key_1': 'value_1'},
 #                 'dictB': {'key_2': 'value_2'}}
+
+# this function returns a class distribution dictionary which is nested dictionary
+# inside that nested dictionary there is attribute names as value and distribution of attributes as a key, for example;
+# class_distribution = { 'Gender': {'Male': [18, 36], 'Female': [48, 16]},
+#                        'Polyuria': {'Yes': '[22, 58], 'No': [18, 20]}}
+# the first index in the list shows positive classified sample count and second index shows negatively classified ones
 def find_class_distribution(x, attributes):
     class_distribution = {}
 
     for attr in attributes:
         col = attributes.get(attr)
 
+        # first column belongs to "Age" attribute which has 5 discrete values
         if col == 0:
             age_dict = {"group1": [0, 0],
                         "group2": [0, 0],
@@ -83,8 +115,6 @@ def find_class_distribution(x, attributes):
                         "group5": [0, 0],
                         "total": [0, 0]
                         }
-
-            # for each row of that specific column
             for row in range(len(x)):
                 if x[row, col] == "group1":
                     if x[row, 16] == "Positive":
@@ -116,6 +146,7 @@ def find_class_distribution(x, attributes):
                     else:
                         age_dict["group5"][1] += 1
 
+            # for total value of age attribute distribution
             age_dict["total"][0] += age_dict["group1"][0]
             age_dict["total"][0] += age_dict["group2"][0]
             age_dict["total"][0] += age_dict["group3"][0]
@@ -128,8 +159,10 @@ def find_class_distribution(x, attributes):
             age_dict["total"][1] += age_dict["group4"][1]
             age_dict["total"][1] += age_dict["group5"][1]
 
+            # add age attribute  to the class distribution dictionary
             class_distribution["age"] = age_dict
 
+        # second column is "Gender" column which has 2 values (female, male)
         elif col == 1:
             gender_dict = {"male": [0, 0],
                            "female": [0, 0],
@@ -155,8 +188,10 @@ def find_class_distribution(x, attributes):
             gender_dict["total"][1] += gender_dict["male"][1]
             gender_dict["total"][1] += gender_dict["female"][1]
 
+            # add gender attribute  to the class distribution dictionary
             class_distribution["gender"] = gender_dict
 
+        # all the other attributes has yes/no values
         else:
             attr_dict = {"yes": [0, 0],
                          "no": [0, 0],
@@ -182,17 +217,19 @@ def find_class_distribution(x, attributes):
             attr_dict["total"][1] += attr_dict["yes"][1]
             attr_dict["total"][1] += attr_dict["no"][1]
 
+            # add that column to the class distribution dictionary
             class_distribution[attr] = attr_dict
 
     # print_nested_dict(class_distribution)
     return class_distribution
 
 
-# dist (distribution) is like positive,negative count [ 13+ , 23- ]
+# this function calculates entropy of the given positive and negative values
+# parameter "dist" is distribution of positive and negative values for an attribute
 def calculate_entropy(dist):
     total = dist[0] + dist[1]
     if total == 0:
-        return 0
+        return 1
     pos_prop = dist[0] / total
     neg_prop = dist[1] / total
     log = lambda prop: math.log(prop, 2) if prop != 0 else 0
@@ -200,7 +237,9 @@ def calculate_entropy(dist):
     return entropy
 
 
+# calculating information gain for all remaining attributes given in the parameter
 def calculate_info_gain(dist, attributes):
+    # dictionary for attributes and respective information gains of them
     info_gain = {"age": 0, "gender": 0, "polyuria": 0, "polydipsia": 0, "sudden weight loss": 0,
                  "weakness": 0, "polyphagia": 0, "penital thrush": 0, "visual blurring": 0,
                  "itching": 0, "irritability": 0, "delayed healing": 0, "partial paresis": 0,
@@ -217,6 +256,8 @@ def calculate_info_gain(dist, attributes):
     return info_gain
 
 
+# next node of the tree is selected based on this function,
+# we calculate information gain for all remaining attributes, and select best of it for the next node
 def select_next_node(info_gain):
     max_info_gain = 0
     best_attr = ""
@@ -227,6 +268,8 @@ def select_next_node(info_gain):
     return best_attr
 
 
+# finding most frequent function is necessary for the base case of the ID3 algorithm
+# when there is no more attribute left in the tree, we choose most frequent value for the leaf
 def find_most_frequent(data):
     positive_count = 0
     negative_count = 0
@@ -253,20 +296,20 @@ def ID3(data, rem_features):
         return Node("LEAF-" + guess, [guess])
     else:
         class_distribution = find_class_distribution(data, rem_features)
+        # print_nested_dict(class_distribution)
         info_gain = calculate_info_gain(class_distribution, rem_features)
         node_name = select_next_node(info_gain)
+
         if node_name == "":
             return Node("LEAF-" + guess, [guess])
-        # print("---------------------------->",node_name)
+
         node_values = []
-        # # print(".....................",class_distribution)
         for x in class_distribution.get(node_name):
             if x != "total":
                 node_values.append(x)
 
         features = rem_features.copy()
         rem_features.pop(node_name)
-        # print(rem_features.keys())
         node_children = []
 
         for i in node_values:  # yes no
@@ -280,10 +323,13 @@ def ID3(data, rem_features):
 
         node = Node(node_name, node_values)
         node.children = node_children
+        node.information_gain = info_gain.get(node_name)
+        node.class_distribution = class_distribution.get(node_name).get("total")
         return node
 
 
 def decision_tree_test(node, test):
+    # attributes and their respective indices in the data is given with dictionary
     attributes = {"age": 0, "gender": 1, "polyuria": 2, "polydipsia": 3, "sudden weight loss": 4,
                   "weakness": 5, "polyphagia": 6, "penital thrush": 7, "visual blurring": 8,
                   "itching": 9, "irritability": 10, "delayed healing": 11, "partial paresis": 12,
@@ -329,13 +375,15 @@ def classification_performance(root, x_test):
     print("Recall: ", recall)
     print("F1 Score: ", f1_score)
 
+    return accuracy, precision, recall, f1_score
+
 
 def k_fold(x):
     # start and end points of each fold
     size = int(x.shape[0] / 5)
     arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
     # for each fold, we create our test and train set and then call KNN classification function
-    for i in range(5):
+    for i in range(1):
         # 1/5 part of the data set as test data
         x_test = x[arr[i]:arr[i + 1]]
 
@@ -356,6 +404,109 @@ def k_fold(x):
         print(root)
 
         classification_performance(root, x_test)
+    return
+
+
+def preorder_traversal_util(root, all_twigs):
+    if root.values[0] == "Positive" or root.values[0] == "Negative":
+        return
+
+    leaf_count = 0
+    for item in root.children:
+        if item.values[0] == "Positive" or item.values[0] == "Negative":
+            leaf_count += 1
+    if leaf_count == len(root.children):
+        all_twigs.append(root)
+
+    for child in root.children:
+        preorder_traversal_util(child, all_twigs)
+    return
+
+
+def find_least_informative_twig(root):
+    all_twigs = []
+    preorder_traversal_util(root, all_twigs)
+    info_gain = 1
+    least_informative_twig = None
+    for twig in all_twigs:
+        if info_gain >= twig.information_gain:
+            info_gain = twig.information_gain
+            least_informative_twig = twig
+    # print(least_informative_twig)
+    return least_informative_twig
+
+
+def prune_tree(root, x_validation):
+    current_accuracy = classification_performance(root, x_validation)[0]  # değişiklikler sonrası
+    last_accuracy = classification_performance(root, x_validation)[0]
+    twig = find_least_informative_twig(root)
+
+    while current_accuracy >= last_accuracy:
+        name = twig.name
+        values = twig.values
+        children = twig.children
+        info_gain = twig.information_gain
+
+        if twig.class_distribution[0] >= twig.class_distribution[1]:
+            twig.name = "LEAF-Positive"
+            twig.values = ["Positive"]
+            twig.children = []
+            twig.information_gain = -1
+        elif twig.class_distribution[1] > twig.class_distribution[0]:
+            twig.name = "LEAF-Negative"
+            twig.values = ["Negative"]
+            twig.children = []
+            twig.information_gain = -1
+
+        last_accuracy = current_accuracy
+        current_accuracy = classification_performance(root, x_validation)[0]
+
+        if current_accuracy < last_accuracy:
+            twig.name = name
+            twig.values = values
+            twig.children = children
+            twig.information_gain = info_gain
+            current_accuracy = classification_performance(root, x_validation)[0]
+            break
+
+        twig = find_least_informative_twig(root)
+
+    print(twig)
+    return root
+
+
+def k_fold_and_prune(x):
+    # start and end points of each fold
+    size = int(x.shape[0] / 5)
+    arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
+    # for each fold, we create our test and train set and then call KNN classification function
+    for i in range(1):
+        # 1/5 part of the data set as validation set
+        x_validation = x[arr[i]:arr[i + 1]]
+
+        # 1/5 part of the data set as test set
+        x_test = x[arr[i + 1]:arr[i + 2]]
+
+        # rest of the data set as train data
+        a = x[0:arr[i]]
+        b = x[arr[i + 2]:]
+        x_train = np.concatenate((a, b), axis=0)
+
+        attributes = {"age": 0, "gender": 1, "polyuria": 2, "polydipsia": 3, "sudden weight loss": 4,
+                      "weakness": 5, "polyphagia": 6, "penital thrush": 7, "visual blurring": 8,
+                      "itching": 9, "irritability": 10, "delayed healing": 11, "partial paresis": 12,
+                      "muscle stiffness": 13, "alopecia": 14, "obesity": 15}
+
+        print()
+        print("--------------------------FOLD", i + 1, "--------------------------------------------")
+
+        root = ID3(x_train, attributes)
+        print(root)
+
+        root = prune_tree(root, x_validation)
+        print(root)
+
+        classification_performance(root, x_test)
 
     return
 
@@ -372,7 +523,9 @@ def main():
     np.random.seed(101)
     np.random.shuffle(x)
 
-    k_fold(x.copy())
+    # k_fold(x.copy())
+
+    k_fold_and_prune(x.copy())
 
 
 if __name__ == "__main__":
