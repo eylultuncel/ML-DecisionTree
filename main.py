@@ -275,45 +275,60 @@ def find_most_frequent(data):
 
 
 def ID3(data, rem_features):
+
+    # find majority of the classes and make a guess
     positive, negative = find_most_frequent(data)
     if positive > negative:
         guess = "Positive"
     else:
         guess = "Negative"
 
+    # base case: if there arent any positive instances then leaf must be labeled negative
     if positive == 0:
         return Node("LEAF-Negative", ["Negative"])
+    # base case: if there arent any negative instances then leaf must be labeled positive
     elif negative == 0:
         return Node("LEAF-Positive", ["Positive"])
+    # base case: if there arent any attributes left to classify, then we must choose majority of the labels as leaf node
     elif len(rem_features) == 0:
         return Node("LEAF-" + guess, [guess])
+
     else:
+        # finding distribution of the classes for each of the attributes
         class_distribution = find_class_distribution(data, rem_features)
-        # print_nested_dict(class_distribution)
+
+        # between all of the remaining attributes, calculate information gain of each of them
         info_gain = calculate_info_gain(class_distribution, rem_features)
+
+        # select the best node (highest information gain) and make it the next node in the tree
         node_name = select_next_node(info_gain)
 
         if node_name == "":
             return Node("LEAF-" + guess, [guess])
 
+        # get all the values of that specific attribute like [yes, no], [male, female]
         node_values = []
         for x in class_distribution.get(node_name):
             if x != "total":
                 node_values.append(x)
 
         features = rem_features.copy()
+        # pop out selected attribute from remaining features
         rem_features.pop(node_name)
         node_children = []
 
-        for i in node_values:  # yes no
+        for i in node_values:
+            # take subset of the selected value in the data
             subset = np.ndarray([0, 17])
             for row in range(len(data)):
                 val = data[row, features.get(node_name)]
                 if val.lower() == i:
                     subset = np.vstack([subset, data[row, :]])
 
+            # to continue making decision tree, call ID3 function recursively
             node_children.append(ID3(subset, rem_features.copy()))
 
+        # create a node in the tree with selected attributes
         node = Node(node_name, node_values)
         node.children = node_children
         node.information_gain = info_gain.get(node_name)
@@ -357,10 +372,6 @@ def classification_performance(root, x_test):
             fp += 1
         elif prediction != sample[16] and prediction == "Negative":
             fn += 1
-    # print("TP = ", tp)
-    # print("TN = ", tn)
-    # print("FP = ", fp)
-    # print("FN = ", fn)
 
     accuracy = (tp + tn) / (tp + tn + fp + fn)
     precision = tp / (tp + fp)
@@ -374,7 +385,7 @@ def k_fold(x):
     size = int(x.shape[0] / 5)
     arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
     # for each fold, we create our test and train set and then call KNN classification function
-    for i in range(1):
+    for i in range(5):
         # 1/5 part of the data set as test data
         x_test = x[arr[i]:arr[i + 1]]
 
@@ -392,7 +403,7 @@ def k_fold(x):
         print("--------------------------FOLD", i + 1, "--------------------------------------------")
 
         root = ID3(x_train, attributes)
-        print(root)
+        # print(root)
 
         accuracy, precision, recall, f1_score = classification_performance(root, x_test)
         print("Accuracy: ", accuracy)
@@ -481,8 +492,6 @@ def prune_tree(root, x_validation):
             break
 
         twig = find_least_informative_twig(root)
-
-    print(twig)
     return root
 
 
@@ -515,20 +524,20 @@ def k_fold_and_prune(x):
         print("--------------------------FOLD", i + 1, "--------------------------------------------")
 
         root = ID3(x_train, attributes)
-        print(root)
+        # print(root)
 
         accuracy = classification_performance(root, x_test)[0]
-        print("TEST ACCURACY FIRST BEFORE PRUNE :", accuracy)
+        print("Test Accuracy Before Pruning :", accuracy)
+        print()
 
         root = prune_tree(root, x_validation)
-        print(root)
+        # print(root)
 
         accuracy, precision, recall, f1_score = classification_performance(root, x_test)
         print("Accuracy: ", accuracy)
         print("Precision: ", precision)
         print("Recall: ", recall)
         print("F1 Score: ", f1_score)
-
     return
 
 
@@ -544,7 +553,7 @@ def main():
     np.random.seed(101)
     np.random.shuffle(x)
 
-    # k_fold(x.copy())
+    k_fold(x.copy())
 
     k_fold_and_prune(x.copy())
 
