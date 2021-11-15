@@ -1,23 +1,20 @@
-import copy
 import math
-import numpy
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 
 # Node class for creating decision tree
 # every node has name -> attribute names
 #                values -> attribute values [ val1 , val2 , .. ]
 #                children -> selected child node for sequentially ordered values [ child of val1, child of val2 , ..]
+#                class_distribution -> positive and negative class distribution of node as [ positive# , negative# ]
+#                information_gain -> calculated information gain of the node
 #
 #        Attribute (Node)       --> name
 #           /        \
 #         yes         no        --> values
 #         /            \
 #       Attr           Attr     --> children
-from matplotlib import pyplot as plt
-from sklearn import tree
-
-
 class Node(object):
     def __init__(self, name, values):
         self.name = name
@@ -30,22 +27,13 @@ class Node(object):
         self.children.append(obj)
 
     def __str__(self, level=0):
-        ret = "\t|" * level + "+----" + repr(self.name) + "(" + repr(self.class_distribution) + repr(
-            self.information_gain) + ")\n"
+        ret = "\t|" * level + "+----" + repr(self.name) + "\n"
         for child in self.children:
             ret += child.__str__(level + 1)
         return ret
 
     def __repr__(self):
         return '<tree node representation>'
-
-
-# function for visualizing nested dictionaries
-def print_nested_dict(nested_dict):
-    for attr in nested_dict:
-        print(attr)
-        for i in nested_dict[attr]:
-            print("\t ", i, "\t[", nested_dict[attr][i][0], "+ ,", nested_dict[attr][i][1], "- ]")
 
 
 # discretization function for "Age" attribute which is continuous attribute
@@ -92,13 +80,18 @@ def discretization(x):
     return x
 
 
-# nested_dict = { 'dictA': {'key_1': 'value_1'},
-#                 'dictB': {'key_2': 'value_2'}}
+# function for visualizing nested dictionaries
+def print_nested_dict(nested_dict):
+    for attr in nested_dict:
+        print(attr)
+        for i in nested_dict[attr]:
+            print("\t ", i, "\t[", nested_dict[attr][i][0], "+ ,", nested_dict[attr][i][1], "- ]")
+
 
 # this function returns a class distribution dictionary which is nested dictionary
 # inside that nested dictionary there is attribute names as value and distribution of attributes as a key, for example;
 # class_distribution = { 'Gender': {'Male': [18, 36], 'Female': [48, 16]},
-#                        'Polyuria': {'Yes': '[22, 58], 'No': [18, 20]}}
+#                        'Polyuria': {'Yes': '[22, 58], 'No': [18, 20]}     }
 # the first index in the list shows positive classified sample count and second index shows negatively classified ones
 def find_class_distribution(x, attributes):
     class_distribution = {}
@@ -313,7 +306,7 @@ def ID3(data, rem_features):
         node_children = []
 
         for i in node_values:  # yes no
-            subset = numpy.ndarray([0, 17])
+            subset = np.ndarray([0, 17])
             for row in range(len(data)):
                 val = data[row, features.get(node_name)]
                 if val.lower() == i:
@@ -335,8 +328,10 @@ def decision_tree_test(node, test):
                   "itching": 9, "irritability": 10, "delayed healing": 11, "partial paresis": 12,
                   "muscle stiffness": 13, "alopecia": 14, "obesity": 15}
 
+    # if it is leaf node then return the class of if (Positive/Negative)
     if node.name == "LEAF-Positive" or node.name == "LEAF-Negative":
         return node.values[0]
+    # if it ii one of the internal nodes, then go one more level down in decision tree
     else:
         for val in node.values:
             if test[attributes.get(node.name)].lower() == val:
@@ -345,6 +340,8 @@ def decision_tree_test(node, test):
                 return decision_tree_test(child_node, test)
 
 
+# for testing performance we use accuracy, recall, precision and f1 score metrics
+# those metrics are calculated in the function below
 def classification_performance(root, x_test):
     tp = 0
     tn = 0
@@ -360,21 +357,15 @@ def classification_performance(root, x_test):
             fp += 1
         elif prediction != sample[16] and prediction == "Negative":
             fn += 1
-    print("TP = ", tp)
-    print("TN = ", tn)
-    print("FP = ", fp)
-    print("FN = ", fn)
+    # print("TP = ", tp)
+    # print("TN = ", tn)
+    # print("FP = ", fp)
+    # print("FN = ", fn)
 
     accuracy = (tp + tn) / (tp + tn + fp + fn)
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1_score = (2 * recall * precision) / (recall + precision)
-
-    print("Accuracy: ", accuracy)
-    print("Precision: ", precision)
-    print("Recall: ", recall)
-    print("F1 Score: ", f1_score)
-
     return accuracy, precision, recall, f1_score
 
 
@@ -403,14 +394,23 @@ def k_fold(x):
         root = ID3(x_train, attributes)
         print(root)
 
-        classification_performance(root, x_test)
+        accuracy, precision, recall, f1_score = classification_performance(root, x_test)
+        print("Accuracy: ", accuracy)
+        print("Precision: ", precision)
+        print("Recall: ", recall)
+        print("F1 Score: ", f1_score)
+
     return
 
 
+# in preorder traversal of tree we search all nodes to find twigs in the tree
+# twigs are the nodes which are their all children were leaves
 def preorder_traversal_util(root, all_twigs):
+    # when found a leaf, return ( base case)
     if root.values[0] == "Positive" or root.values[0] == "Negative":
         return
 
+    # if the node is not leaf then look if its all children are leaves ( twig node )
     leaf_count = 0
     for item in root.children:
         if item.values[0] == "Positive" or item.values[0] == "Negative":
@@ -418,35 +418,45 @@ def preorder_traversal_util(root, all_twigs):
     if leaf_count == len(root.children):
         all_twigs.append(root)
 
+    # recursively call the function to continue searching
     for child in root.children:
         preorder_traversal_util(child, all_twigs)
     return
 
 
+# finding least informative twig requires to look all of the twigs and their respective information gain values
+# for traversing the tree we use preorder traversal method and find all twigs
 def find_least_informative_twig(root):
     all_twigs = []
+    # all twigs are collected at the end of his function
     preorder_traversal_util(root, all_twigs)
     info_gain = 1
     least_informative_twig = None
+    # between all twigs search for the least informative one
     for twig in all_twigs:
         if info_gain >= twig.information_gain:
             info_gain = twig.information_gain
             least_informative_twig = twig
-    # print(least_informative_twig)
     return least_informative_twig
 
 
+# prune tree function identifies the twigs which are not necessary for prediction,  based on the information gain
 def prune_tree(root, x_validation):
-    current_accuracy = classification_performance(root, x_validation)[0]  # değişiklikler sonrası
+    current_accuracy = classification_performance(root, x_validation)[0]
     last_accuracy = classification_performance(root, x_validation)[0]
+
+    # finding least informative twig based on the information gain values
     twig = find_least_informative_twig(root)
 
+    # while accuracy is not changing or increasing, we keep pruning the tree
     while current_accuracy >= last_accuracy:
+        # save those information for reverting the last changes if necessary
         name = twig.name
         values = twig.values
         children = twig.children
         info_gain = twig.information_gain
 
+        # based on majority of class(positive/negative) we replace twig with a leaf
         if twig.class_distribution[0] >= twig.class_distribution[1]:
             twig.name = "LEAF-Positive"
             twig.values = ["Positive"]
@@ -461,6 +471,7 @@ def prune_tree(root, x_validation):
         last_accuracy = current_accuracy
         current_accuracy = classification_performance(root, x_validation)[0]
 
+        # if current accuracy decreases then we must revert the changes we made in the last twig
         if current_accuracy < last_accuracy:
             twig.name = name
             twig.values = values
@@ -480,17 +491,20 @@ def k_fold_and_prune(x):
     size = int(x.shape[0] / 5)
     arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
     # for each fold, we create our test and train set and then call KNN classification function
-    for i in range(1):
+    for i in range(5):
         # 1/5 part of the data set as validation set
         x_validation = x[arr[i]:arr[i + 1]]
 
-        # 1/5 part of the data set as test set
-        x_test = x[arr[i + 1]:arr[i + 2]]
-
-        # rest of the data set as train data
-        a = x[0:arr[i]]
-        b = x[arr[i + 2]:]
-        x_train = np.concatenate((a, b), axis=0)
+        if i != 4:
+            # 1/5 part of the data set as test set
+            x_test = x[arr[i + 1]:arr[i + 2]]
+            # rest of the data set as train data
+            a = x[0:arr[i]]
+            b = x[arr[i + 2]:]
+            x_train = np.concatenate((a, b), axis=0)
+        else:
+            x_test = x[0:arr[1]]
+            x_train = x[arr[1]:arr[4]]
 
         attributes = {"age": 0, "gender": 1, "polyuria": 2, "polydipsia": 3, "sudden weight loss": 4,
                       "weakness": 5, "polyphagia": 6, "penital thrush": 7, "visual blurring": 8,
@@ -503,10 +517,17 @@ def k_fold_and_prune(x):
         root = ID3(x_train, attributes)
         print(root)
 
+        accuracy = classification_performance(root, x_test)[0]
+        print("TEST ACCURACY FIRST BEFORE PRUNE :", accuracy)
+
         root = prune_tree(root, x_validation)
         print(root)
 
-        classification_performance(root, x_test)
+        accuracy, precision, recall, f1_score = classification_performance(root, x_test)
+        print("Accuracy: ", accuracy)
+        print("Precision: ", precision)
+        print("Recall: ", recall)
+        print("F1 Score: ", f1_score)
 
     return
 
