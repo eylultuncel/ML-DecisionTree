@@ -27,7 +27,7 @@ class Node(object):
         self.children.append(obj)
 
     def __str__(self, level=0):
-        ret = "\t|" * level + "+----" + repr(self.name) + "\n"
+        ret = "\t   |" * level + "+---- " + repr(self.name) + "\n"
         for child in self.children:
             ret += child.__str__(level + 1)
         return ret
@@ -531,7 +531,7 @@ def k_fold_and_prune(x):
         print()
 
         root = prune_tree(root, x_validation)
-        # print(root)
+        print(root)
 
         accuracy, precision, recall, f1_score = classification_performance(root, x_test)
         print("Accuracy: ", accuracy)
