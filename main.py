@@ -385,7 +385,7 @@ def k_fold(x):
     size = int(x.shape[0] / 5)
     arr = [0, size, 2 * size, 3 * size, 4 * size, 5 * size]
     # for each fold, we create our test and train set and then call KNN classification function
-    for i in range(5):
+    for i in range(1):
         # 1/5 part of the data set as test data
         x_test = x[arr[i]:arr[i + 1]]
 
